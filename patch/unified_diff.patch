@@ -1,0 +1,200 @@
+From 4fcccd1a0161b4fc5153c5c36678d5f4c8f1f93f Mon Sep 17 00:00:00 2001
+From: CODeRUS <coderusinbox@gmail.com>
+Date: Fri, 22 Aug 2014 15:23:34 +0600
+Subject: [PATCH 1/1] Test patch for enabling search on page
+
+---
+ /usr/share/sailfish-browserpages/BrowserPage.qml        | 113 +++++++++++++++++++++++++++++++++++++++++--
+ /usr/share/sailfish-browserpages/components/WebView.qml |   3 +-
+ 2 files changed, 110 insertions(+), 6 deletions(-)
+
+diff --git a/usr/share/sailfish-browser/pages/BrowserPage.qml b/usr/share/sailfish-browser/pages/BrowserPage.qml
+index 6f5b098..0fad202 100644
+--- a/usr/share/sailfish-browser/pages/BrowserPage.qml
++++ b/usr/share/sailfish-browser/pages/BrowserPage.qml
+@@ -114,7 +114,7 @@ Page {
+ 
+         visible: WebUtils.firstUseDone
+         active: browserPage.status === PageStatus.Active
+-        toolbarHeight: toolBarContainer.height
++        toolbarHeight: (!Qt.inputMethod.visible ? toolBarContainer.height : 0) + (searchOnPageVisible ? toolBarSearchOnPage.height : 0)
+         fullscreenHeight: portrait ? Screen.height : Screen.width
+         portrait: browserPage.isPortrait
+         maxLiveTabCount: 3
+@@ -129,7 +129,7 @@ Page {
+         // TODO: once we get rid of bad rendering loop, check if we could use here parent.height
+         // instead of fullscreenHeight. Currently with parent.height binding we skip
+         // frames when returning back from tab page so that virtual keyboard was open.
+-        height: fullscreenHeight - (fullscreenMode ? 0 : toolBarContainer.height)
++        height: fullscreenHeight - (fullscreenMode || Qt.inputMethod.visible ? 0 : toolBarContainer.height) - window.pageStack.imSize - (searchOnPageVisible ? toolBarSearchOnPage.height : 0)
+ 
+         Behavior on height {
+             enabled: !browserPage.orientationTransitionRunning
+@@ -144,7 +144,7 @@ Page {
+         z: 1
+         y: webView.height
+         width: parent.width
+-        visible: !webView.popupActive
++        visible: !webView.popupActive && !Qt.inputMethod.visible
+ 
+         function openTabPage(focus, newTab, operationType) {
+             if (browserPage.status === PageStatus.Active) {
+@@ -161,7 +161,7 @@ Page {
+         Browser.ToolBarContainer {
+             id: toolBarContainer
+             width: parent.width
+-            enabled: !webView.fullscreenMode
++            enabled: !webView.fullscreenMode && !Qt.inputMethod.visible
+ 
+             Browser.ProgressBar {
+                 id: progressBar
+@@ -182,7 +182,7 @@ Page {
+                 height: parent.height
+ 
+                 // 5 icons, 4 spaces between
+-                spacing: isPortrait ? (width - (backIcon.width * 5)) / 4 : Theme.paddingSmall
++                spacing: isPortrait ? (width - (backIcon.width * 6)) / 5 : Theme.paddingSmall
+ 
+                 Browser.IconButton {
+                     visible: isLandscape
+@@ -231,6 +231,13 @@ Page {
+                 }
+ 
+                 Browser.IconButton {
++                    icon.source: "image://theme/icon-m-search"
++                    onClicked: {
++                        webView.searchOnPageVisible = !webView.searchOnPageVisible
++                    }
++                }
++
++                Browser.IconButton {
+                     id: tabPageButton
+                     icon.source: "image://theme/icon-m-tabs"
+                     onClicked: {
+@@ -268,6 +275,102 @@ Page {
+         }
+     }
+ 
++    Item {
++        id: toolBarSearchOnPage
++        width: parent.width
++        height: isPortrait ? Settings.toolbarLarge : Settings.toolbarSmall
++        anchors.bottom: browserPage.bottom
++        z: 1
++        visible: webView.searchOnPageVisible
++        onVisibleChanged: {
++            searchField.text = ""
++            searchField.focus = false
++        }
++
++        SearchField {
++            id: searchField
++            width: parent.width
++            textRightMargin: (Theme.itemSizeSmall * 2) + Theme.paddingMedium
++            background: Component {
++                Item {
++                    anchors.fill: parent
++
++                    IconButton {
++                        x: searchField.textLeftMargin - width - Theme.paddingSmall
++                        width: icon.width
++                        height: parent.height
++                        icon.source: "image://theme/icon-m-search"
++                        highlighted: down || searchField._editor.activeFocus
++
++                        enabled: searchField.enabled
++
++                        onClicked: {
++                            searchField._editor.forceActiveFocus()
++                        }
++                    }
++
++                    IconButton {
++                        id: prevButton
++                        anchors {
++                            right: nextButton.left
++                            rightMargin: Theme.paddingMedium
++                        }
++                        width: icon.width
++                        height: parent.height
++                        icon.source: "image://theme/icon-m-up"
++
++                        enabled: searchField.enabled
++
++                        opacity: searchField.text.length > 0 ? 1 : 0
++                        Behavior on opacity {
++                            FadeAnimation {}
++                        }
++
++                        onClicked: {
++                            webView.sendAsyncMessage("embedui:find",
++                                                    {
++                                                        "again": true,
++                                                        "backwards": true
++                                                    })
++                        }
++                    }
++
++                    IconButton {
++                        id: nextButton
++                        anchors {
++                            right: parent.right
++                            rightMargin: Theme.paddingLarge
++                        }
++                        width: icon.width
++                        height: parent.height
++                        icon.source: "image://theme/icon-m-down"
++
++                        enabled: searchField.enabled
++
++                        opacity: searchField.text.length > 0 ? 1 : 0
++                        Behavior on opacity {
++                            FadeAnimation {}
++                        }
++
++                        onClicked: {
++                            webView.sendAsyncMessage("embedui:find",
++                                                    {
++                                                        "again": true,
++                                                        "backwards": false
++                                                    })
++                        }
++                    }
++                }
++            }
++            onTextChanged: {
++                webView.sendAsyncMessage("embedui:find",
++                                        {
++                                            "text": text
++                                        })
++            }
++        }
++    }
++
+     CoverActionList {
+         enabled: browserPage.status === PageStatus.Active
+         iconBackground: true
+diff --git a/usr/share/sailfish-browser/pages/components/WebView.qml b/usr/share/sailfish-browser/pages/components/WebView.qml
+index bcc5726..2e4d1d3 100644
+--- a/usr/share/sailfish-browser/pages/components/WebView.qml
++++ b/usr/share/sailfish-browser/pages/components/WebView.qml
+@@ -22,6 +22,7 @@ WebContainer {
+ 
+     property color _decoratorColor: Theme.highlightDimmerColor
+     property bool firstUseFullscreen
++    property bool searchOnPageVisible
+ 
+     function stop() {
+         if (contentItem) {
+@@ -96,7 +97,7 @@ WebContainer {
+     foreground: Qt.application.active
+     inputPanelHeight: window.pageStack.panelSize
+     inputPanelOpenHeight: window.pageStack.imSize
+-    fullscreenMode: (contentItem && contentItem.chromeGestureEnabled && !contentItem.chrome) || webView.inputPanelVisible || !webView.foreground || (contentItem && contentItem.fullscreen) || firstUseFullscreen
++    fullscreenMode: !searchOnPageVisible && ((contentItem && contentItem.chromeGestureEnabled && !contentItem.chrome) || webView.inputPanelVisible || !webView.foreground || (contentItem && contentItem.fullscreen) || firstUseFullscreen)
+     _readyToLoad: contentItem && contentItem.viewReady && tabModel.loaded
+ 
+     loading: contentItem ? contentItem.loading : false
+-- 
+1.9.1
+

@@ -1,0 +1,8 @@
+{
+    "name": "Search text on page in Browser",
+    "description": "A sailfish-browser patch enabling search text on page",
+    "category": "browser",
+    "infos": {
+        "maintainer": "coderus"
+    }
+}
