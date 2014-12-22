@@ -5,13 +5,13 @@ BuildArch: noarch
 # << macros
 
 Summary:    Search text on page in Browser
-Version:    0.0.1
+Version:    0.0.2
 Release:    1
 Group:      Qt/Qt
 License:    TODO
 Source0:    %{name}-%{version}.tar.bz2
 Requires:   patchmanager
-Requires:   sailfish-browser >= 1.1.3.2
+Requires:   sailfish-browser >= 1.1.23.2
 
 %description
 A sailfish-browser patch enabling search text on page
